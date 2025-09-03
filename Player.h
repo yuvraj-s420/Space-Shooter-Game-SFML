@@ -1,5 +1,6 @@
 #pragma once
 #include <SFML/Graphics.hpp>
+#include "Enemy.h"
 
 class Player {
 
@@ -16,11 +17,17 @@ public:
     void updateBullets(float delta);
     void drawPlayer(sf::RenderWindow &window);
     void drawBullets(sf::RenderWindow &window);
-    void checkEnemyBulletCollision(std::vector<sf::Sprite> &enemy_bullets);
+    void checkEnemyBulletCollision(std::vector<EnemyBullet>& enemy_bullets);
+    void setPos(sf::Vector2f pos);
+    void reset();
 
     float getBulletSpeed();
     float getBulletSize();
     std::vector<sf::Sprite>& getBullets();
+    sf::Vector2f getPos();
+    sf::Vector2f getDesiredSize();
+    float getHealth();
+    float getMaxHealth();
 
 private:
 
@@ -36,9 +43,11 @@ private:
     sf::Clock bullet_clock;
 
     float move_speed = 500.f;
-    float health = 10.f;
+    float max_health = 10.f;
+    float health = max_health;
     bool alive = true;
 
+    sf::Vector2i texture_size = sf::Vector2i(48, 58);   // size of sprites in spritesheet_player.png
     sf::Sprite sprite;
     sf::Sprite bullet_spr;
 

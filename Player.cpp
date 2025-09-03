@@ -1,13 +1,13 @@
 #include "Player.h"
+#include "Enemy.h"
 #include <iostream>
 #include <algorithm>
 
 void Player::initialize(){
     // sets player sprite according to desired size, and sets its origin to the center
 
-    sf::Vector2u sizeU = sprite.getTexture().getSize();
-    sf::Vector2f center(sizeU.x / 2.f, sizeU.y / 2.f);  // vector2f center cooridnate because setOrigin requires it
-    sf::Vector2f scale_factors(desired_size.x / sizeU.x, desired_size.y / sizeU.y);
+    sf::Vector2f center(texture_size.x / 2.f, texture_size.y / 2.f);  // vector2f center cooridnate because setOrigin requires it
+    sf::Vector2f scale_factors(desired_size.x / texture_size.x, desired_size.y / texture_size.y);
 
     sprite.setScale(scale_factors);
     sprite.setOrigin(center);
@@ -20,29 +20,84 @@ void Player::initialize(){
 
 void Player::handleInput(float delta){
     // handles movement inputs WASD, and shooting
+    // updates sprite rectangle to showcase movement animations
 
     float bullet_timer = bullet_clock.getElapsedTime().asSeconds();
 
-    // Move player based on key
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W)){
+    bool moving = false;
+
+    float sqrt2 = 1.4142;
+
+    // sprite index selectors
+    int i;
+    int j;
+
+    // Move player based on key, change sprite as needed
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W) && sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)){
+        sprite.move({1.f * move_speed * delta / sqrt2, -1.f * move_speed * delta / sqrt2});
+        i = 3;
+        j = 2;
+        moving = true;
+    }
+    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S) && sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)){
+        sprite.move({1.f * move_speed * delta / sqrt2, 1.f * move_speed * delta / sqrt2});
+        i = 1;
+        j = 2;
+        moving = true;
+    }
+    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W) && sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)){
+        sprite.move({-1.f * move_speed * delta / sqrt2, -1.f * move_speed * delta / sqrt2});
+        i = 3;
+        j = 0;
+        moving = true;
+    }
+    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S) && sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)){
+        sprite.move({-1.f * move_speed * delta / sqrt2, 1.f * move_speed * delta / sqrt2});
+        i = 1;
+        j = 0;
+        moving = true;
+    }
+    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W)){
         sprite.move({0.f, -1.f * move_speed * delta});
+        i = 4;
+        j = 1;
+        moving = true;
     }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S)){
+    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S)){
         sprite.move({0.f, 1.f * move_speed * delta});
+        i = 2;
+        j = 1;
+        moving = true;
     }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)){
+    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)){
         sprite.move({1.f * move_speed * delta, 0.f});
+        i = 0;
+        j = 2;
+        moving = true;
     }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)){
+    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)){
         sprite.move({-1.f * move_speed * delta, 0.f});
+        i = 0;
+        j = 0;
+        moving = true;
     }
+    
+    
+    if (!moving){   // if no key is pressed
+        i = 0;
+        j = 1;
+    }
+
+    sf::IntRect spr_rect(sf::Vector2i(j * texture_size.x, i * texture_size.y), texture_size);
+    sprite.setTextureRect(spr_rect);
+
     // Clamp position within window
     float x = std::max(desired_size.x / 2.f, std::min(sprite.getPosition().x, window_width - desired_size.x / 2.f));
     float y = std::max(desired_size.y / 2.f, std::min(sprite.getPosition().y, window_height - desired_size.y / 2.f));
     sprite.setPosition({x, y});
 
     // Shoot bullet with E, according to rate 
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E) && bullet_timer >= (1 / bullet_rate)){
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space) && bullet_timer >= (1 / bullet_rate)){
 
         createBullet();
 
@@ -50,6 +105,13 @@ void Player::handleInput(float delta){
     }
 
     updateBullets(delta);
+}
+
+void Player::reset(){
+    alive = true;
+    health = max_health;
+    bullets.clear();
+    sprite.setPosition({50 + desired_size.x / 2.f, window_height / 2.f});
 }
 
 void Player::takeDamage(){
@@ -113,18 +175,19 @@ void Player::updateBullets(float delta){
 
 }
 
-void Player::checkEnemyBulletCollision(std::vector<sf::Sprite>& enemy_bullets) {
+void Player::checkEnemyBulletCollision(std::vector<EnemyBullet>& enemy_bullets) {
     // checks for collision with enemy bullets and takes damage
     
     sf::FloatRect enemy_bb = sprite.getGlobalBounds();
 
     if (alive){
         for (int i = 0; i < enemy_bullets.size(); ) {
-            sf::FloatRect bullet_bb = enemy_bullets[i].getGlobalBounds();
+            sf::FloatRect bullet_bb = enemy_bullets[i].bullet_spr.getGlobalBounds();
 
             if (const std::optional intersection = enemy_bb.findIntersection(bullet_bb)) {
                 takeDamage();
-                std::cout << "Player hit! Health: " << health << std::endl;
+                
+                //std::cout << "Player hit! Health: " << health << std::endl;
 
                 enemy_bullets.erase(enemy_bullets.begin() + i); // remove bullet so it can’t damage again
                 break; // player only takes 1 hit per frame
@@ -147,4 +210,23 @@ float Player::getBulletSpeed(){
 
 float Player::getBulletSize(){
     return bullet_size;
+}
+
+sf::Vector2f Player::getPos(){
+    return sprite.getPosition();
+}
+
+sf::Vector2f Player::getDesiredSize(){
+    return desired_size;
+}
+
+float Player::getHealth(){
+    return health;
+}
+float Player::getMaxHealth(){
+    return max_health;
+}
+
+void Player::setPos(sf::Vector2f pos){
+    sprite.setPosition(pos);
 }

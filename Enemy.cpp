@@ -1,5 +1,6 @@
 #include "Enemy.h"
 #include <algorithm>
+#include <cmath>
 
 // ENEMY
 void Enemy::takeDamage(){
@@ -8,7 +9,8 @@ void Enemy::takeDamage(){
         health -= 1;
     }
     
-    if (health == 0){
+    if (health <= 0){
+        health = 0;
         alive = false;
     }
 }
@@ -17,7 +19,6 @@ bool Enemy::getAlive(){
     return alive;
 }
 
-// SIMPLE ENEMY
 void Enemy::initialize(){
     // Scales sprite according to the desired size, and sets its origin to the center
 
@@ -42,16 +43,13 @@ void Enemy::update(float delta){
 void Enemy::drawBullets(sf::RenderWindow &window){
 
     for (int i = 0; i < bullets.size(); i++){
-        window.draw(bullets[i]);
+        window.draw(bullets[i].bullet_spr);
     }
 }
 
-void Enemy::createBullet(){
-    // Creates a bullet sprite and adds it to the bullets vector
+void Enemy::createBullet(sf::Vector2f player_pos){
+    // Creates an EnemyBullet object and adds it to the bullets vector
     // Shoots a burst of 5 bullets with a cooldown of 2 seconds
-
-    int max_burst = 5;
-    float cooldown_time = 2.f;
 
     float bullet_timer = bullet_clock.getElapsedTime().asSeconds();
 
@@ -60,7 +58,8 @@ void Enemy::createBullet(){
         if (bullet_timer >= (1 / bullet_rate)){
 
             sf::Sprite bullet = bullet_spr;
-            bullet.setRotation(sf::degrees(180));
+            EnemyBullet enemy_bullet = {bullet_spr};
+
             sf::Vector2u sizeU = bullet.getTexture().getSize();
             sf::Vector2f center(sizeU.x / 2.f, sizeU.y / 2.f);  // vector2f center cooridnate because setOrigin requires it
             sf::Vector2f scale_factors(bullet_size.x / sizeU.x, bullet_size.y / sizeU.y);
@@ -69,7 +68,28 @@ void Enemy::createBullet(){
             bullet.setOrigin(center);
             bullet.setPosition(sprite.getPosition() - sf::Vector2f((desired_size.x + bullet_size.x) / 2.f - bullet_offset, 0.f));     //bullet drawn left of sprite
 
-            bullets.push_back(bullet);
+            // Vector from bullet to player
+            sf:: Vector2f bullet_unit_vector = player_pos - bullet.getPosition();
+            float mag = std::sqrt(bullet_unit_vector.x * bullet_unit_vector.x + bullet_unit_vector.y * bullet_unit_vector.y);
+            bullet_unit_vector /= mag;
+
+            // convert to degrees, add 90 because rotations start from positive y
+            float angle = 90 + std::atan2(bullet_unit_vector.y, bullet_unit_vector.x) * 180 / 3.1415;  
+            
+            //std::cout << angle << std::endl;
+
+            // boss bullets target player, others just shoot left
+            if (type == "boss"){
+                bullet.setRotation(sf::degrees(angle));
+            }
+            else{
+                bullet.setRotation(sf::degrees(-90));
+            }
+            
+            enemy_bullet.bullet_spr = bullet;
+            enemy_bullet.unit_vector = bullet_unit_vector;
+
+            bullets.push_back(enemy_bullet);
             burst_count++;
 
             bullet_timer = bullet_clock.restart().asSeconds();
@@ -87,18 +107,17 @@ void Enemy::createBullet(){
         shooting = true;
     }
     
-    
 }
 
 void Enemy::updateBullets(float delta){
-    // Updates each bullet to move to the right, and erases if it leaves window bounds
+    // Updates each bullet to move to the right (for non boss enemies), and erases if it leaves window bounds
 
     for (int i = 0; i < bullets.size(); ){
 
-        bullets[i].move({-1.f * delta * bullet_speed, 0.f});
+        bullets[i].bullet_spr.move({-1.f * delta * bullet_speed, 0.f});
 
         // Erase bullet if it leaves window bounds
-        sf::Vector2f pos = bullets[i].getPosition();
+        sf::Vector2f pos = bullets[i].bullet_spr.getPosition();
         if (pos.x > window_width || pos.x < 0 || pos.y < 0 || pos.y > window_height){
             bullets.erase(bullets.begin() + i);
         }
@@ -142,7 +161,7 @@ sf::Vector2f Enemy::getDesiredSize(){
     return desired_size;
 }
 
-std::vector<sf::Sprite>& Enemy::getBullets(){
+std::vector<EnemyBullet>& Enemy::getBullets(){
     return bullets;
 }
 
@@ -157,5 +176,28 @@ std::string Enemy::getType(){
     return type;
 }
 
+
+void BossEnemy::updateBullets(float delta){
+    // Updates each bullet to move to the right, and erases if it leaves window bounds
+
+    for (int i = 0; i < bullets.size(); ){
+        
+        bullets[i].bullet_spr.move({1.f * delta * bullet_speed * bullets[i].unit_vector.x, 1.f * delta * bullet_speed * bullets[i].unit_vector.y});
+
+        // Erase bullet if it leaves window bounds
+        sf::Vector2f pos = bullets[i].bullet_spr.getPosition();
+        if (pos.x > window_width || pos.x < 0 || pos.y < 0 || pos.y > window_height){
+            bullets.erase(bullets.begin() + i);
+        }
+        else {
+            i++;    // Increment i here to prevent skipping index from bullets.erase
+        }
+
+    }
+}
+
+float Enemy::getHealth(){
+    return health;
+}
 
 // SHOOTING ENEMY

@@ -1,259 +1,253 @@
 #include <SFML/Graphics.hpp>
 #include <iostream>
-#include <utility>
+#include <fstream>
+#include <random>
 #include "Player.h"
 #include "Background.h"
 #include "Enemy.h"
 #include "TextureManager.h"
+#include "helpers.h"
 
-unsigned int width = 2000;
-unsigned int height = 1000;
 
-void spawnEnemies(std::vector<Enemy>& enemies, TextureManager &texture_manager, sf::Clock &spawn_clock, float &spawn_timer);
-void updateEnemies(std::vector<Enemy> &enemies, Player &player, float delta);
-void drawEnemies(std::vector<Enemy> &enemies, sf::RenderWindow &window);
+// Playing field
+unsigned int screen_width = 2000;     
+unsigned int screen_height = 1200;
+
+// Size of HUD showing health, score, level, pause button, etc.
+int HUD_width = screen_width;
+int HUD_height = 140;
+
+int level = 1;
+int score = 0;
+int highscore;
+int difficulty = 1; // 0, easy   1, normal   2, hard
+Difficulty easy   {0.5f, 0.5f, 0.5f};
+Difficulty normal {1.0f, 1.0f, 1.0f};
+Difficulty hard   {2.0f, 2.0f, 2.0f};
+
+bool spawning = true;
+int base_enemies = 10;      // First level has 10 enemies
+float growth_rate = 1.25;   // 25% more enemies each level
+int num_enemies = base_enemies;
+int wave = 1;
+float spawn_timer = 0.f;
+int enemies_in_wave = 1;     // starts at 1, increases each wave, triangle pattern of spawning
+float wave_interval = 2.f;  // 2 seconds
+int boss_interval = 2;      // Every 2 levels
+int enemies_left = num_enemies;
+int max_per_wave = 9;   
+
+enum class GameState{
+    Menu,
+    Playing,
+    Settings,
+    Paused,
+    GameOver,
+};
+
+GameState game_state = GameState::Menu;     //start at menu
+GameState prev_state;
 
 int main()
 {
-    
+    srand(time(0));
     sf::Clock delta_clock;
-    sf::Clock spawn_clock;
 
     /*============================== INITIALIZE ==============================*/
     // Create the window
-    sf::RenderWindow window(sf::VideoMode({width, height}), "My First SFML 'Game'");
+    sf::RenderWindow window(sf::VideoMode({screen_width, screen_height}), "Space Shooter Game");
     window.setFramerateLimit(60);
 
+    // texture_manager, background, player, and enemy vector stay for the lifestyle of the program, vector gets emptied when game restarts
     TextureManager texture_manager;
-    Background background(width, height, texture_manager.getTexture("assets/background.png"));
-    Player player(width, height, texture_manager.getTexture("assets/player.png"), texture_manager.getTexture("assets/bullet.png"));
+    Background background(screen_width, screen_height, texture_manager.getTexture("assets/background.png"));
+    Player player(screen_width, screen_height, texture_manager.getTexture("assets/spritesheet_player.png"), texture_manager.getTexture("assets/bullet.png"));
     
-    // Enemies
-    std::vector<Enemy> enemies;
+    // Enemies stored as unique_ptr to avoid slicing of child members
+    std::vector<std::unique_ptr<Enemy>> enemies;
+
+    // Load highscore from file into memory
+    highscore = loadHighscore();
 
     background.initialize();
     player.initialize();
+    player.setPos({player.getDesiredSize().x / 2.f, HUD_height + (screen_height - HUD_height) / 2.f});
 
-    /*============================== INITIALIZE ==============================*/
-
-    /*============================== UPDATE ==============================*/
     while (window.isOpen()){
+        
+        window.clear(sf::Color::Black);                             // clear previous frame
 
-        float delta = delta_clock.restart().asSeconds();                 // Delta time between each iteration for movement keys
-        float spawn_timer = spawn_clock.getElapsedTime().asSeconds();    // keeps track of time between enemy spawns 
+        sf::Vector2i mouse_pos = sf::Mouse::getPosition(window);    // mouse position relative to window
+        float delta = delta_clock.restart().asSeconds();            // Delta time between each iteration
+        bool mouse_pressed = false;
 
         while (const std::optional event = window.pollEvent()){
-            if (event->is<sf::Event::Closed>()){
+            if (event->is<sf::Event::Closed>()){    // close window
                 window.close();
             }
+            if (event->is<sf::Event::MouseButtonPressed>()) {
+                mouse_pressed = true;  
+            }
+        }
+
+        switch (game_state) {
+            case GameState::Menu: {  // draw menu, handle menu input
+                char res = drawMenu(window, mouse_pos, mouse_pressed);
+                if (res == 'p'){    // start game loop
+                    game_state = GameState::Playing;
+                    prev_state = GameState::Menu;
+                }
+                else if (res == 's'){   // settings
+                    game_state = GameState::Settings;
+                    prev_state = GameState::Menu;
+                }
+                else if (res == 'q'){   // Exit window
+                    if (score > highscore){     // save highscore
+                        saveHighscore(score);
+                    }
+                    window.close();
+                    prev_state = GameState::Menu;
+                }
+                
+                break;
+            }
+            case GameState::Playing: {      // main game loop with HUD and pause button on top right
             
+                // Updates
+                spawnEnemies(enemies, texture_manager, delta, difficulty);
+                player.handleInput(delta);
+                player.updateBullets(delta);
+                for (int i = 0; i < enemies.size(); i++){
+                    player.checkEnemyBulletCollision(enemies[i]->getBullets());
+                }
+                updateEnemies(enemies, player, delta);
+                
+                // Drawing
+                background.draw(window);
+                player.drawPlayer(window);
+                player.drawBullets(window);
+                drawEnemies(enemies, window);
+
+                // HUD draw and pause button click check
+                sf::FloatRect pause_button = drawHUD(window, player, texture_manager);
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Escape) || (pause_button.contains({static_cast<float>(mouse_pos.x), static_cast<float>(mouse_pos.y)}) && mouse_pressed)){
+                    game_state = GameState::Paused;
+                    prev_state = GameState::Playing;
+                }
+
+                //End game when health = 0
+                if (player.getHealth() == 0.f){
+                    game_state = GameState::GameOver;
+                    prev_state = GameState::Playing;
+                }
+                
+                break;
+            }
+            case GameState::Paused: {   // stop updates, show pause menu, handle settings, resume, quit to main menu 
+
+                // Draw the same game frame underneath the pause menu
+                background.draw(window);
+                player.drawPlayer(window);
+                player.drawBullets(window);
+                drawEnemies(enemies, window);
+                drawHUD(window, player, texture_manager);
+
+                // Black transparent overlay
+                sf::RectangleShape overlay({static_cast<float>(screen_width), static_cast<float>(screen_height)});
+                overlay.setFillColor(sf::Color(0,0,0,128));
+                window.draw(overlay);
+
+                char res = drawPauseMenu(window, mouse_pos, mouse_pressed);
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Escape)){
+                    game_state = GameState::Playing;
+                    prev_state = GameState::Paused;
+                }
+                if (res == 'p'){    // start game loop
+                    game_state = GameState::Playing;
+                    prev_state = GameState::Paused;
+                }
+                else if (res == 's'){   // settings
+                    game_state = GameState::Settings;
+                    prev_state = GameState::Paused;
+                }
+                else if (res == 'q'){   // Quit to menu
+                    if (score > highscore){     // save highscore
+                        saveHighscore(score);
+                    }
+                    // Reset game variables
+                    level = 1;
+                    score = 0;
+                    highscore = loadHighscore();
+                    spawning = true;    // to refresh spawnEnemies()
+                    num_enemies = base_enemies;
+                    wave = 1;
+                    spawn_timer = 0.f;
+                    enemies_in_wave = 1;     // starts at 1, increases each wave, triangle pattern of spawning
+                    enemies_left = num_enemies;
+
+                    // clear enemies and reset player
+                    player.reset();
+                    enemies.clear();
+
+                    game_state = GameState::Menu;
+                    prev_state = GameState::Paused;
+                }
+                break;
+            }
+
+            case GameState::Settings: {     // show settings menu, handle highscore reset and difficulty selector
+                char res = drawSettings(window, mouse_pos, mouse_pressed, difficulty, highscore);
+                if (res == 'b'){
+                    game_state = prev_state;    // returns to menu or pause state when back button is pressed
+                    prev_state = GameState::Settings;
+                }
+                break;
+            }
+
+            case GameState::GameOver: {     // show game over screen, handle quit to main menu or quit to desktop
+                // Draw the same game frame underneath the pause menu
+                background.draw(window);
+                player.drawPlayer(window);
+                player.drawBullets(window);
+                drawEnemies(enemies, window);
+                drawHUD(window, player, texture_manager);
+
+                // Black transparent overlay
+                sf::RectangleShape overlay({static_cast<float>(screen_width), static_cast<float>(screen_height)});
+                overlay.setFillColor(sf::Color(0,0,0,200));
+                window.draw(overlay);
+
+                char res = drawGameOver(window, mouse_pos, mouse_pressed);
+                if (res == 'm'){
+
+                    if (score > highscore){     // save highscore
+                        saveHighscore(score);
+                    }
+                    
+                    // Reset game variables
+                    level = 1;
+                    score = 0;
+                    highscore = loadHighscore();
+                    spawning = true;    // to refresh spawnEnemies()
+                    num_enemies = base_enemies;
+                    wave = 1;
+                    spawn_timer = 0.f;
+                    enemies_in_wave = 1;     // starts at 1, increases each wave, triangle pattern of spawning
+                    enemies_left = num_enemies;
+
+                    // clear enemies and reset player
+                    player.reset();
+                    enemies.clear();
+                    game_state = GameState::Menu;
+                    prev_state = GameState::GameOver;
+                }
+                else if (res == 'q'){
+                    window.close();
+                }
+                break;
+            }     
         }
-
-
-        //Enemy spawns
-        spawnEnemies(enemies, texture_manager, spawn_clock, spawn_timer);
-
-        // Player updates
-        player.handleInput(delta);
-        player.updateBullets(delta);
-        for (int i = 0; i < enemies.size(); i++){
-            player.checkEnemyBulletCollision(enemies[i].getBullets());
-        }
-
-        // Enemy updates
-        updateEnemies(enemies, player, delta);
-
-        /*============================== UPDATE ==============================*/
-
-        /*============================== DRAW ==============================*/
-        
-        window.clear(sf::Color::Black);
-        background.draw(window);
-
-        player.drawPlayer(window);
-        player.drawBullets(window);
-
-        drawEnemies(enemies, window);
-
         window.display();
-    /*============================== DRAW ==============================*/
     }
-
     return 0;
-}
-
-
-
-void spawnEnemies(std::vector<Enemy>& enemies, TextureManager& texture_manager, sf::Clock& spawn_clock, float& spawn_timer){
-    // Spawns enemies in waves
-
-    static int level = 1;
-    static int wave = 1;
-
-    float wave_interval = 5.f;     // spawn waves every 5 seconds
-    float level_interval;
-
-    int num_simple;
-    int num_fast;
-    int num_shooting;
-    int num_boss;
-
-    float spacing;
-
-
-    // determined what enemies to spawn each level
-    switch (level){
-
-        case 1:
-            num_simple = 3;
-            num_fast = 3;
-            num_shooting = 3;
-            num_boss = 1;
-            break;
-
-        case 2:
-            num_simple = 5;
-            num_fast = 5;
-            num_shooting = 5;
-            num_boss = 1;
-            break;
-
-        case 3:
-            num_simple = 7;
-            num_fast = 7;
-            num_shooting = 7;
-            num_boss = 2;
-            break;
-
-        case 4:
-            num_simple = 9;
-            num_fast = 9;
-            num_shooting = 9;
-            num_boss = 2;
-            break;
-
-        case 5:
-            num_simple = 9;
-            num_fast = 9;
-            num_shooting = 9;
-            num_boss = 3;
-            break;
-
-        default:    // stays level 5 indefinitely
-            num_simple = 9;
-            num_fast = 9;
-            num_shooting = 9;
-            num_boss = 3;
-            break;
-
-    }
-
-    if (spawn_timer > wave_interval){
-        
-        std::cout << "Level: " << level << "  Wave: " << wave << std::endl;
-
-        switch (wave){
-            case 1:     // spawn fast enemy
-                spacing = height / (num_fast + 1);
-
-                for (int i = 0; i < num_fast; i++){
-
-                    FastEnemy fast_enemy(width, height, texture_manager.getTexture("assets/fast_enemy.png"), texture_manager.getTexture("assets/enemy_bullet.png"));
-                    fast_enemy.initialize();
-                    // Space out enemies equally
-                    fast_enemy.setPos({width - fast_enemy.getDesiredSize().x / 2.f, spacing * (i + 1)});
-                    enemies.push_back(fast_enemy);
-                }
-                wave++;
-                break;
-
-            case 2:     // spawn simple enemy
-                spacing = height / (num_simple + 1);
-
-                for (int i = 0; i < num_simple; i++){
-
-                    SimpleEnemy simple_enemy(width, height, texture_manager.getTexture("assets/simple_enemy.png"), texture_manager.getTexture("assets/enemy_bullet.png"));
-                    simple_enemy.initialize();
-                    // Space out enemies equally
-                    simple_enemy.setPos({width - simple_enemy.getDesiredSize().x / 2.f, spacing * (i + 1)});
-                    enemies.push_back(simple_enemy);
-                }
-                wave++;
-                break;
-
-            case 3:     // spawn shooting enemy
-                spacing = height / (num_shooting + 1);
-
-                for (int i = 0; i < num_shooting; i++){
-
-                    ShootingEnemy shooting_enemy(width, height, texture_manager.getTexture("assets/shooting_enemy.png"), texture_manager.getTexture("assets/enemy_bullet.png"));
-                    shooting_enemy.initialize();
-                    // Space out enemies equally
-                    shooting_enemy.setPos({width - shooting_enemy.getDesiredSize().x / 2.f, spacing * (i + 1)});
-                    enemies.push_back(shooting_enemy);
-                }
-                wave++;
-                break;
-
-            case 4:     // spawn boss
-                spacing = height / (num_boss + 1);
-
-                for (int i = 0; i < num_boss; i++){
-
-                    BossEnemy boss_enemy(width, height, texture_manager.getTexture("assets/boss_enemy.png"), texture_manager.getTexture("assets/enemy_bullet.png"));
-                    boss_enemy.initialize();
-                    // Space out enemies equally
-                    boss_enemy.setPos({width - boss_enemy.getDesiredSize().x / 2.f, spacing * (i + 1)});
-                    enemies.push_back(boss_enemy);
-                }
-                wave = 1;   //reset wave to 1 after spawning boss
-                level++;    //increment level
-                break;
-
-            default:   // should not happen
-                std::cout << "Should not happen\n";
-                break;
-        }
-
-        spawn_timer = spawn_clock.restart().asSeconds();    // restart spawn timer and clock to 0
-    }
-
-}   
-
-void updateEnemies(std::vector<Enemy>& enemies, Player &player, float delta){
-
-    for (int i = 0; i < enemies.size(); ){
-
-        // update movement and check if they are hit by player bullets
-        enemies[i].update(delta);
-        enemies[i].checkPlayerBulletCollision(player.getBullets());
-
-        // create bullets if the enemy is a shooting one
-        if (enemies[i].getType() == "shooting" || enemies[i].getType() == "boss"){
-
-            enemies[i].createBullet();    // enemies share bullet timer might be issue
-            enemies[i].updateBullets(delta);
-        }
-
-        sf::Vector2f pos = enemies[i].getPos();
-
-        // removes enemy from vector if it dies or leaves window bounds
-        if (!enemies[i].getAlive() || pos.x > width || pos.x < 0 || pos.y < 0 || pos.y > height){
-            enemies.erase(enemies.begin() + i);
-        }
-        else{
-            i++; // increment here if enemy not erased to prevent index skipping
-        }
-
-        // Draw here to prevent looping again??
-
-    }
-}
-
-void drawEnemies(std::vector<Enemy>& enemies, sf::RenderWindow &window){
-
-    for (int i = 0; i < enemies.size(); i++){
-        enemies[i].drawEnemy(window);
-        enemies[i].drawBullets(window);
-    }
 }
