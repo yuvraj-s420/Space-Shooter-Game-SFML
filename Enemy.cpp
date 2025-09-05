@@ -73,7 +73,7 @@ void Enemy::createBullet(sf::Vector2f player_pos){
             float mag = std::sqrt(bullet_unit_vector.x * bullet_unit_vector.x + bullet_unit_vector.y * bullet_unit_vector.y);
             bullet_unit_vector /= mag;
 
-            // convert to degrees, add 90 because rotations start from positive y
+            // convert to degrees, add 90 because rotations start from negative y where positive y is downwards
             float angle = 90 + std::atan2(bullet_unit_vector.y, bullet_unit_vector.x) * 180 / 3.1415;  
             
             //std::cout << angle << std::endl;
@@ -129,14 +129,14 @@ void Enemy::updateBullets(float delta){
 
 }
 
-void Enemy::checkPlayerBulletCollision(std::vector<sf::Sprite>& player_bullets) {
+void Enemy::checkPlayerBulletCollision(std::vector<PlayerBullet> &player_bullets) {
     // checks for collision with player bullets and takes damage
     
     sf::FloatRect enemy_bb = sprite.getGlobalBounds();
 
     if (alive){
         for (int i = 0; i < player_bullets.size(); ) {
-            sf::FloatRect bullet_bb = player_bullets[i].getGlobalBounds();
+            sf::FloatRect bullet_bb = player_bullets[i].bullet_spr.getGlobalBounds();
 
             if (const std::optional intersection = enemy_bb.findIntersection(bullet_bb)) {
                 takeDamage();

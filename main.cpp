@@ -27,13 +27,15 @@ Difficulty hard   {2.0f, 2.0f, 2.0f};
 
 bool spawning = true;
 int base_enemies = 10;      // First level has 10 enemies
-float growth_rate = 1.25;   // 25% more enemies each level
+float growth_rate = 1.25;   // 50% more enemies each level
 int num_enemies = base_enemies;
 int wave = 1;
 float spawn_timer = 0.f;
 int enemies_in_wave = 1;     // starts at 1, increases each wave, triangle pattern of spawning
 float wave_interval = 2.f;  // 2 seconds
-int boss_interval = 2;      // Every 2 levels
+float min_wave_interval = 1.f;
+float wave_interval_shrink_rate = 0.1f; // wave interval reduction each level
+int boss_interval = 3;      // Every 3 levels
 int enemies_left = num_enemies;
 int max_per_wave = 9;   
 

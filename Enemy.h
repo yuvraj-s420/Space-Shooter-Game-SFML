@@ -1,14 +1,15 @@
 #pragma once
 #include <SFML/Graphics.hpp>
-#include "TextureManager.h"
+#include "Player.h"
 #include <iostream>
+
+struct PlayerBullet;    // forward decleration to resolve cyclical depencency 
 
 struct Difficulty {
     float enemy_health_multiplier;
     float bullet_speed_multiplier;
     float max_burst_multiplier;
 };
-
 
 struct EnemyBullet {
     sf::Sprite bullet_spr;
@@ -59,7 +60,7 @@ public:
     void drawEnemy(sf::RenderWindow &window);
     void createBullet(sf::Vector2f player_pos);
     virtual void updateBullets(float delta);
-    void checkPlayerBulletCollision(std::vector<sf::Sprite> &player_bullets);
+    void checkPlayerBulletCollision(std::vector<PlayerBullet> &player_bullets);
     void drawBullets(sf::RenderWindow &window);
 
     bool getAlive();
@@ -121,7 +122,7 @@ class BossEnemy : public Enemy {
 public:
     BossEnemy(float w, float h, const sf::Texture& t, const sf::Texture& bt, Difficulty difficulty) : Enemy(w, h, t, bt, difficulty){
         type = "boss";
-        health = 25.f;
+        health = 50.f;
         speed = 20.f;
         max_burst = 15;
         desired_size = sf::Vector2f(200, 200);

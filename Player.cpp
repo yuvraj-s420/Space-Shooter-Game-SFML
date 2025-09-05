@@ -2,6 +2,7 @@
 #include "Enemy.h"
 #include <iostream>
 #include <algorithm>
+#include <cmath>
 
 void Player::initialize(){
     // sets player sprite according to desired size, and sets its origin to the center
@@ -110,6 +111,7 @@ void Player::handleInput(float delta){
 void Player::reset(){
     alive = true;
     health = max_health;
+    bullet_level = 1;
     bullets.clear();
     sprite.setPosition({50 + desired_size.x / 2.f, window_height / 2.f});
 }
@@ -133,24 +135,36 @@ void Player::drawPlayer(sf::RenderWindow &window)
 void Player::drawBullets(sf::RenderWindow &window){
 
     for (int i = 0; i < bullets.size(); i++){
-        window.draw(bullets[i]);
+        window.draw(bullets[i].bullet_spr);
     }
 }
 
 void Player::createBullet(){
     // Creates a bullet sprite and adds it to the bullets vector
+    static float angle_range = 30; // max angle for bullets to spread by
+    float spacing = angle_range / (bullet_level + 1);
+
+    for (int i = 0; i < bullet_level; i++){
+        PlayerBullet bullet(bullet_spr);
+        sf::Vector2u sizeU = bullet.bullet_spr.getTexture().getSize();
+        sf::Vector2f center(sizeU.x / 2.f, sizeU.y / 2.f);  // vector2f center cooridnate because setOrigin requires it
+        sf::Vector2f scale_factors(bullet_size / sizeU.x, bullet_size / sizeU.y);
+
+        bullet.bullet_spr.setScale(scale_factors);
+        bullet.bullet_spr.setOrigin(center);
+        bullet.bullet_spr.setPosition(sprite.getPosition() + sf::Vector2f((desired_size.x + bullet_size) / 2.f - bullet_offset, 0.f));     //bullet drawn right of sprite
+        float angle = 90 - angle_range / 2 + spacing * (i + 1);
+        bullet.bullet_spr.setRotation(sf::degrees(angle));     // all bullets angled equally spaced
+        
+        bullet.unit_vector.x = std::sin(angle / 180 * 3.1415) ;      //std::sin and cos require radians, so convert to degrees
+        bullet.unit_vector.y = std::cos(angle / 180 * 3.1415) ; 
+
+        //std::cout << angle << std::endl;
+        //std::cout << bullet.unit_vector.x << ", " << bullet.unit_vector.y << std::endl;
+
+        bullets.push_back(bullet);
+    }
     
-    sf::Sprite bullet = bullet_spr;
-    sf::Vector2u sizeU = bullet.getTexture().getSize();
-    sf::Vector2f center(sizeU.x / 2.f, sizeU.y / 2.f);  // vector2f center cooridnate because setOrigin requires it
-    sf::Vector2f scale_factors(bullet_size / sizeU.x, bullet_size / sizeU.y);
-
-    bullet.setScale(scale_factors);
-    bullet.setOrigin(center);
-    bullet.setPosition(sprite.getPosition() + sf::Vector2f((desired_size.x + bullet_size) / 2.f - bullet_offset, 0.f));     //bullet drawn right of sprite
-    bullet.setRotation(sf::degrees(90));
-
-    bullets.push_back(bullet);
     //bullets[bullets.size() - 1].setPosition(sprite.getPosition() + sf::Vector2f((desired_size.x + bullet_size) / 2.f - bullet_offset, 0.f));
 
 }
@@ -160,10 +174,10 @@ void Player::updateBullets(float delta){
 
     for (int i = 0; i < bullets.size(); ){
 
-        bullets[i].move({1.f * delta * bullet_speed, 0.f});
+        bullets[i].bullet_spr.move({1.f * delta * bullet_speed * bullets[i].unit_vector.x, 1.f * delta * bullet_speed * bullets[i].unit_vector.y});
 
         // Erase bullet if it leaves window bounds
-        sf::Vector2f pos = bullets[i].getPosition();
+        sf::Vector2f pos = bullets[i].bullet_spr.getPosition();
         if (pos.x > window_width || pos.x < 0 || pos.y < 0 || pos.y > window_height){
             bullets.erase(bullets.begin() + i);
         }
@@ -173,6 +187,12 @@ void Player::updateBullets(float delta){
 
     }
 
+}
+
+void Player::levelUp(){
+
+    bullet_level = std::min(++bullet_level, max_level);
+    std::cout << bullet_level << std::endl;
 }
 
 void Player::checkEnemyBulletCollision(std::vector<EnemyBullet>& enemy_bullets) {
@@ -200,7 +220,7 @@ void Player::checkEnemyBulletCollision(std::vector<EnemyBullet>& enemy_bullets) 
     
 }
 
-std::vector<sf::Sprite>& Player::getBullets(){
+std::vector<PlayerBullet>& Player::getBullets(){
     return bullets;
 }
 

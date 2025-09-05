@@ -21,6 +21,8 @@ extern int wave;
 extern float spawn_timer;
 extern int enemies_in_wave;
 extern float wave_interval;
+extern float min_wave_interval;
+extern float wave_interval_shrink_rate;
 extern int boss_interval;
 extern int enemies_left;
 extern int max_per_wave;
@@ -441,7 +443,8 @@ void spawnEnemies(std::vector<std::unique_ptr<Enemy>> &enemies, TextureManager &
             spawning = true;
             enemies_in_wave = 1;    // reset number of enemies in wave to 1
             wave = 1;               // reset wave to 1
-            
+            wave_interval = std::max(min_wave_interval, wave_interval * (1 - wave_interval_shrink_rate));
+
             num_enemies = static_cast<int>(num_enemies * growth_rate); // next level will have more enemies
             enemies_left = num_enemies;
         }
@@ -454,7 +457,8 @@ void spawnEnemies(std::vector<std::unique_ptr<Enemy>> &enemies, TextureManager &
 
 void updateEnemies(std::vector<std::unique_ptr<Enemy>> &enemies, Player &player, float delta){
     // Updates each enemy along with its bullets, and erases it from the vector if it dies or leaves window bounds
-
+    // levels up player bullets after a boss is killed in a boss round (once per round)
+    static bool leveled = false;
     for (int i = 0; i < enemies.size(); ){
 
         // update movement and check if they are hit by player bullets
@@ -478,7 +482,12 @@ void updateEnemies(std::vector<std::unique_ptr<Enemy>> &enemies, Player &player,
 
             if (enemies[i]->getType() == "boss"){   // bosses give 10 points, regular enemies give 1
                 score += 10;
-                // Drop powerup
+                
+                if (!leveled){      // Drop powerup once per boss level
+                    player.levelUp();
+                    leveled = true;
+                }
+                
             }
             else{
                 score++;
@@ -488,10 +497,14 @@ void updateEnemies(std::vector<std::unique_ptr<Enemy>> &enemies, Player &player,
         else{
             i++; // increment here if enemy not erased to prevent index skipping
         }
-
         // Draw here to prevent looping again??
 
     }
+
+    if (enemies.empty()){   // reset leveled flag once all enemies are dead
+        leveled = false;
+    }
+    
 }
 
 void drawEnemies(std::vector<std::unique_ptr<Enemy>> &enemies, sf::RenderWindow &window){
