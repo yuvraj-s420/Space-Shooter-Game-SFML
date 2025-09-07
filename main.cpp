@@ -244,6 +244,9 @@ int main()
                     prev_state = GameState::GameOver;
                 }
                 else if (res == 'q'){
+                    if (score > highscore){
+                        saveHighscore(score);
+                    }
                     window.close();
                 }
                 break;
