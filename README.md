@@ -2,7 +2,7 @@
 
 A 2D space shooter built in C++ using the SFML graphics library. The player controls a spaceship, shoots enemies, and tries to survive as long as possible.
 
-Features
+#Features
 
 Player-controlled spaceship with movement and shooting
 
@@ -14,7 +14,7 @@ Health, score, and HUD display
 
 Modular design with classes for player, enemy, bullet, and game logic
 
-Technologies Used
+#Technologies Used
 
 C++17
 
