@@ -40,3 +40,7 @@ Object-oriented programming principles
 Event-driven game loop design
 
 Collision detection and real-time rendering
+
+## How to Play
+
+Just run the .exe
