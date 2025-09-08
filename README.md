@@ -1,23 +1,42 @@
 # Space-Shooter-Game-SFML
 
+Space-Shooter-Game-SFML
+
 A 2D space shooter built in C++ using the SFML graphics library. The player controls a spaceship, shoots enemies, and tries to survive as long as possible.
 
-#Features
+## Features
 
-Player-controlled spaceship with movement and shooting
+Player-controlled spaceship with smooth movement and shooting
 
-Enemy waves that increase in difficulty
+Enemy waves that scale in difficulty over time
 
-Bullet and collision system
+Bullet and collision system (player ↔ enemy ↔ projectiles)
 
-Health, score, and HUD display
+Health, lives, and score tracking
 
-Modular design with classes for player, enemy, bullet, and game logic
+Heads-up display (HUD) showing game stats in real time
 
-#Technologies Used
+Pause and resume functionality
+
+High score persistence across sessions
+
+Multiple enemy types with different movement patterns
+
+Dynamic difficulty progression for replayability
+
+Background and sprite rendering with SFML
+
+
+Clean modular design with separate classes for game objects and systems
+
+## Technologies Used
 
 C++17
 
-SFML 3.0+ (graphics, window, system)
+SFML 3.0+ (graphics, window, system, audio)
 
 Object-oriented programming principles
+
+Event-driven game loop design
+
+Collision detection and real-time rendering
