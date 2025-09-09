@@ -43,4 +43,4 @@ Collision detection and real-time rendering
 
 ## How to Play
 
-Git clone and just run the .exe
+Git clone or download zip and just run the .exe
