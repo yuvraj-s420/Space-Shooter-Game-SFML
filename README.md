@@ -4,6 +4,10 @@ Space-Shooter-Game-SFML
 
 A 2D space shooter built in C++ using the SFML graphics library. The player controls a spaceship, shoots enemies, and tries to survive as long as possible.
 
+![game example image](https://github.com/yuvraj-s420/Space-Shooter-Game-SFML/blob/main/Game_Example.png "game example image")
+
+
+
 ## Features
 
 Player-controlled spaceship with smooth movement and shooting
